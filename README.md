@@ -50,7 +50,25 @@ SIMOP/
 
 ## 📸 Screenshots
 
-[Agregar capturas de pantalla]
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/0aac9290-690a-4803-800b-63fd9bebac54" width="450" />
+  <img src="https://github.com/user-attachments/assets/345e63f8-6b10-4895-8212-c0c0560497f5" width="450" />
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/50a2487a-0065-490d-9eeb-7ec0e6df9544" width="450" />
+  <img src="https://github.com/user-attachments/assets/5f10586b-4eb3-4e10-b207-6aa18ba8e1f2" width="450" />
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/4eab672f-1aef-47a3-add7-3c05843353ce" width="450" />
+  <img src="https://github.com/user-attachments/assets/6108c157-a88b-430a-b560-5f7e81c31ce3" width="450" />
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/1581784b-e2a7-4353-a942-b8e210e345af" width="450" />
+</p>
+
 
 ## 👤 Autor
 
