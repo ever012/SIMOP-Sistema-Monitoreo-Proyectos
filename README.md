@@ -23,7 +23,6 @@ Sistema completo para la gestión y seguimiento de proyectos sociales con dashbo
 - Blazor Server (NET 8.0)
 - Bootstrap 5.3
 - Bootstrap Icons
-- Diseño moderno con gradientes
 
 ## 📂 Estructura del Proyecto
 ```
