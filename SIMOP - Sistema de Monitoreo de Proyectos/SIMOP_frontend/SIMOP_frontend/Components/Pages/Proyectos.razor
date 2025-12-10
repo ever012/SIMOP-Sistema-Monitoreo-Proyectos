@@ -1,0 +1,508 @@
+﻿@page "/proyectos"
+@using SIMOP_frontend.Models
+@using SIMOP_frontend.Services
+@inject NavigationManager Navigation
+@inject IProyectoService ProyectoService
+@inject ICategoriaService CategoriaService
+@inject IJSRuntime JS
+
+
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3><i class="bi bi-folder-fill"></i> Gestión de Proyectos</h3>
+            <small class="text-muted">Monitoreo y seguimiento de proyectos sociales</small>
+        </div>
+        <button class="btn btn-primary" @onclick="AbrirModalNuevo">
+            <i class="bi bi-plus-circle"></i> Nuevo Proyecto
+        </button>
+    </div>
+
+    <!-- Mensajes -->
+    @if (mensaje != null)
+    {
+        <div class="alert alert-@(mensaje.Tipo) alert-dismissible fade show" role="alert">
+            <strong>@(mensaje.Tipo == "success" ? "✓" : "✗")</strong> @mensaje.Texto
+            <button type="button" class="btn-close" @onclick="() => mensaje = null"></button>
+        </div>
+    }
+
+    <!-- Filtros -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Buscar</label>
+                    <input type="text" class="form-control" @bind="filtroBusqueda" @bind:event="oninput" placeholder="Nombre o ubicación...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Categoría</label>
+                    <select class="form-select" @bind="filtroCategoria">
+                        <option value="0">Todas las categorías</option>
+                        @foreach (var cat in categorias)
+                        {
+                            <option value="@cat.cat_codigo">@cat.cat_nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Ordenar por</label>
+                    <select class="form-select" @bind="ordenamiento">
+                        <option value="nombre">Nombre</option>
+                        <option value="fecha">Fecha Inicio</option>
+                        <option value="presupuesto">Presupuesto</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltros">
+                        <i class="bi bi-x-circle"></i> Limpiar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    @if (cargando)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2">Cargando proyectos...</p>
+        </div>
+    }
+    else if (ProyectosFiltrados.Count == 0)
+    {
+        <div class="alert alert-info text-center">
+            <i class="bi bi-info-circle fs-3"></i>
+            <p class="mb-0 mt-2">No hay proyectos registrados. ¡Crea el primero!</p>
+        </div>
+    }
+    else
+    {
+        <!-- Grid de Tarjetas -->
+        <div class="row g-4 mb-4">
+            @foreach (var proyecto in ProyectosFiltrados)
+            {
+                var categoria = categorias.FirstOrDefault(c => c.cat_codigo == proyecto.pro_codCategoria);
+                var progreso = CalcularProgreso(proyecto);
+
+                <div class="col-lg-4 col-md-6">
+                    <div class="card h-100 shadow-sm proyecto-card">
+                        <div class="card-header bg-gradient-primary text-white">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h5 class="card-title mb-1">@proyecto.pro_nombre</h5>
+                                    <small><i class="bi bi-tag"></i> @(categoria?.cat_nombre ?? "Sin categoría")</small>
+                                </div>
+                                <span class="badge bg-light text-dark">#@proyecto.pro_codigo</span>
+                            </div>
+                        </div>
+
+                        <div class="card-body">
+                            <p class="card-text text-muted small mb-3">
+                                @(proyecto.pro_descripcion?.Length > 100
+                                                        ? proyecto.pro_descripcion.Substring(0, 100) + "..."
+                                                        : proyecto.pro_descripcion ?? "Sin descripción")
+                            </p>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <small class="text-muted">Progreso</small>
+                                    <small class="fw-bold text-primary">@progreso%</small>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-gradient-success"
+                                         role="progressbar"
+                                         style="width: @progreso%">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <div class="card bg-light border-0">
+                                        <div class="card-body p-2">
+                                            <small class="text-muted d-block">Presupuesto</small>
+                                            <strong class="text-success">@proyecto.pro_presupuestoTotal.ToString("C0")</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card bg-light border-0">
+                                        <div class="card-body p-2">
+                                            <small class="text-muted d-block">Ubicación</small>
+                                            <strong class="small">@(proyecto.pro_ubicacion ?? "N/A")</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-2 text-muted small mb-2">
+                                <div>
+                                    <i class="bi bi-calendar-event"></i>
+                                    <strong>Inicio:</strong> @proyecto.pro_fechaInicio?.ToString("dd/MM/yyyy")
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2 text-muted small">
+                                <div>
+                                    <i class="bi bi-calendar-check"></i>
+                                    <strong>Fin Est.:</strong> @proyecto.pro_fechaFinEstimada?.ToString("dd/MM/yyyy")
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card-footer bg-white border-top-0">
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary flex-fill" @onclick="() => VerDetalle(proyecto.pro_codigo)">
+                                    <i class="bi bi-eye"></i> Ver Detalle
+                                </button>
+                                <button class="btn btn-sm btn-outline-warning" @onclick="() => AbrirModalEditar(proyecto)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmarEliminar(proyecto)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="text-muted small">
+            <i class="bi bi-info-circle"></i> Mostrando <strong>@ProyectosFiltrados.Count</strong> de <strong>@proyectos.Count</strong> proyectos
+        </div>
+    }
+</div>
+
+<!-- Modal Crear/Editar -->
+@if (mostrarModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-@(esNuevo ? "plus-circle" : "pencil-square")"></i>
+                        @(esNuevo ? "Nuevo Proyecto" : "Editar Proyecto")
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CerrarModal"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Nombre del Proyecto <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" @bind="proyectoActual.pro_nombre" maxlength="200" />
+                                @if (string.IsNullOrWhiteSpace(proyectoActual.pro_nombre))
+                                {
+                                    <small class="text-danger">El nombre es requerido</small>
+                                }
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Categoría <span class="text-danger">*</span></label>
+                                <select class="form-select" @bind="proyectoActual.pro_codCategoria">
+                                    <option value="0">-- Seleccionar --</option>
+                                    @foreach (var cat in categorias)
+                                    {
+                                        <option value="@cat.cat_codigo">@cat.cat_nombre</option>
+                                    }
+                                </select>
+                                @if (proyectoActual.pro_codCategoria == 0)
+                                {
+                                    <small class="text-danger">La categoría es requerida</small>
+                                }
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Ubicación</label>
+                                <input type="text" class="form-control" @bind="proyectoActual.pro_ubicacion" maxlength="200" />
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Descripción</label>
+                                <textarea class="form-control" @bind="proyectoActual.pro_descripcion" rows="3" maxlength="500"></textarea>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Fecha de Inicio <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" @bind="proyectoActual.pro_fechaInicio" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Fecha Fin Estimada</label>
+                                <input type="date" class="form-control" @bind="proyectoActual.pro_fechaFinEstimada" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Presupuesto Total <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control" @bind="proyectoActual.pro_presupuestoTotal" step="0.01" min="0" />
+                                </div>
+                                @if (proyectoActual.pro_presupuestoTotal <= 0)
+                                {
+                                    <small class="text-danger">El presupuesto debe ser mayor a 0</small>
+                                }
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarModal">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </button>
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="GuardarProyecto"
+                            disabled="@(!FormularioValido)">
+                        <i class="bi bi-check-circle"></i> @(esNuevo ? "Crear" : "Actualizar")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .bg-gradient-success {
+        background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+    }
+
+    .proyecto-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+        .proyecto-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15) !important;
+        }
+</style>
+
+@code {
+    private List<ProyectoDto> proyectos = new();
+    private List<CategoriaDto> categorias = new();
+    private ProyectoDto proyectoActual = new();
+    private bool cargando = true;
+    private bool mostrarModal = false;
+    private bool esNuevo = true;
+    private Mensaje? mensaje;
+
+    // Filtros
+    private string filtroBusqueda = "";
+    private int filtroCategoria = 0;
+    private string ordenamiento = "nombre";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        try
+        {
+            cargando = true;
+            proyectos = await ProyectoService.GetProyectos();
+            categorias = await CategoriaService.GetCategorias();
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al cargar datos: {ex.Message}", "danger");
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private List<ProyectoDto> ProyectosFiltrados
+    {
+        get
+        {
+            var lista = proyectos.AsEnumerable();
+
+            // Filtro por búsqueda
+            if (!string.IsNullOrWhiteSpace(filtroBusqueda))
+            {
+                lista = lista.Where(p =>
+                    p.pro_nombre.Contains(filtroBusqueda, StringComparison.OrdinalIgnoreCase) ||
+                    (p.pro_ubicacion?.Contains(filtroBusqueda, StringComparison.OrdinalIgnoreCase) ?? false)
+                );
+            }
+
+            // Filtro por categoría
+            if (filtroCategoria > 0)
+            {
+                lista = lista.Where(p => p.pro_codCategoria == filtroCategoria);
+            }
+
+            // Ordenamiento
+            lista = ordenamiento switch
+            {
+                "fecha" => lista.OrderBy(p => p.pro_fechaInicio),
+                "presupuesto" => lista.OrderByDescending(p => p.pro_presupuestoTotal),
+                _ => lista.OrderBy(p => p.pro_nombre)
+            };
+
+            return lista.ToList();
+        }
+    }
+
+    private void LimpiarFiltros()
+    {
+        filtroBusqueda = "";
+        filtroCategoria = 0;
+        ordenamiento = "nombre";
+    }
+
+    private int CalcularProgreso(ProyectoDto proyecto)
+    {
+        // Cálculo simple basado en fechas (puedes mejorarlo con hitos/tareas)
+        if (proyecto.pro_fechaInicio == null || proyecto.pro_fechaFinEstimada == null)
+            return 0;
+
+        var inicio = proyecto.pro_fechaInicio.Value;
+        var fin = proyecto.pro_fechaFinEstimada.Value;
+        var hoy = DateTime.Now;
+
+        if (hoy < inicio) return 0;
+        if (hoy > fin) return 100;
+
+        var totalDias = (fin - inicio).TotalDays;
+        var diasTranscurridos = (hoy - inicio).TotalDays;
+
+        return (int)((diasTranscurridos / totalDias) * 100);
+    }
+
+    private void AbrirModalNuevo()
+    {
+        esNuevo = true;
+        proyectoActual = new ProyectoDto
+        {
+            pro_fechaInicio = DateTime.Now,
+            pro_fechaFinEstimada = DateTime.Now.AddMonths(6)
+        };
+        mostrarModal = true;
+    }
+
+    private void AbrirModalEditar(ProyectoDto proyecto)
+    {
+        esNuevo = false;
+        proyectoActual = new ProyectoDto
+        {
+            pro_codigo = proyecto.pro_codigo,
+            pro_nombre = proyecto.pro_nombre,
+            pro_descripcion = proyecto.pro_descripcion,
+            pro_codCategoria = proyecto.pro_codCategoria,
+            pro_ubicacion = proyecto.pro_ubicacion,
+            pro_presupuestoTotal = proyecto.pro_presupuestoTotal,
+            pro_fechaInicio = proyecto.pro_fechaInicio,
+            pro_fechaFinEstimada = proyecto.pro_fechaFinEstimada
+        };
+        mostrarModal = true;
+    }
+
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        proyectoActual = new();
+    }
+
+    private bool FormularioValido =>
+        !string.IsNullOrWhiteSpace(proyectoActual.pro_nombre) &&
+        proyectoActual.pro_codCategoria > 0 &&
+        proyectoActual.pro_presupuestoTotal > 0 &&
+        proyectoActual.pro_fechaInicio != null;
+
+    private async Task GuardarProyecto()
+    {
+        if (!FormularioValido) return;
+
+        try
+        {
+            (bool exito, string mensajeRespuesta) = esNuevo
+                ? await ProyectoService.CreateProyecto(proyectoActual)
+                : await ProyectoService.UpdateProyecto(proyectoActual.pro_codigo, proyectoActual);
+
+            if (exito)
+            {
+                MostrarMensaje(mensajeRespuesta, "success");
+                CerrarModal();
+                await CargarDatos();
+            }
+            else
+            {
+                MostrarMensaje(mensajeRespuesta, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al guardar: {ex.Message}", "danger");
+        }
+    }
+
+    private async Task ConfirmarEliminar(ProyectoDto proyecto)
+    {
+        bool confirmado = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"¿Estás seguro de eliminar el proyecto '{proyecto.pro_nombre}'?\n\nEsta acción eliminará también todos sus hitos, tareas y registros de presupuesto."
+        );
+
+        if (confirmado)
+        {
+            await EliminarProyecto(proyecto.pro_codigo);
+        }
+    }
+
+    private async Task EliminarProyecto(int id)
+    {
+        try
+        {
+            var (exito, mensajeRespuesta, dependencias) = await ProyectoService.DeleteProyecto(id);
+
+            if (exito)
+            {
+                MostrarMensaje(mensajeRespuesta, "success");
+                await CargarDatos();
+            }
+            else
+            {
+                var textoCompleto = mensajeRespuesta;
+                if (dependencias.Any())
+                {
+                    textoCompleto += " - " + string.Join(", ", dependencias);
+                }
+                MostrarMensaje(textoCompleto, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al eliminar: {ex.Message}", "danger");
+        }
+    }
+
+    private void VerDetalle(int id)
+    {
+        Navigation.NavigateTo($"/proyectos/{id}");
+    }
+
+    private void MostrarMensaje(string texto, string tipo)
+    {
+        mensaje = new Mensaje { Texto = texto, Tipo = tipo };
+    }
+
+    private class Mensaje
+    {
+        public string Texto { get; set; } = string.Empty;
+        public string Tipo { get; set; } = "info";
+    }
+}

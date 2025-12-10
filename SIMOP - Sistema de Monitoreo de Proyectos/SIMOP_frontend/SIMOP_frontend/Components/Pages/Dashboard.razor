@@ -1,0 +1,600 @@
+﻿@page "/"
+@using SIMOP_frontend.Models
+@using SIMOP_frontend.Services
+@inject IProyectoService ProyectoService
+@inject ICategoriaService CategoriaService
+@inject IHitoService HitoService
+@inject ITareaService TareaService
+@inject IPresupuestoService PresupuestoService
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard - SIMOP</PageTitle>
+
+<div class="dashboard-container">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-speedometer2"></i> Dashboard General</h2>
+            <p class="text-muted mb-0">Resumen completo del sistema de monitoreo de proyectos</p>
+        </div>
+        <div>
+            <button class="btn btn-primary" @onclick='() => Navigation.NavigateTo("/proyectos")'>
+                <i class="bi bi-plus-circle"></i> Nuevo Proyecto
+            </button>
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-3 text-muted">Cargando dashboard...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Estadísticas Principales -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-3 col-md-6">
+                <div class="stat-card gradient-purple" @onclick='() => Navigation.NavigateTo("/proyectos")'>
+                    <div class="stat-icon">
+                        <i class="bi bi-folder-fill"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3>@proyectos.Count</h3>
+                        <p>Proyectos Activos</p>
+                        <small class="text-white-50">
+                            <i class="bi bi-arrow-up"></i> Total en sistema
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6">
+                <div class="stat-card gradient-blue" @onclick='() => Navigation.NavigateTo("/hitos")'>
+                    <div class="stat-icon">
+                        <i class="bi bi-flag-fill"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3>@hitos.Count</h3>
+                        <p>Hitos Registrados</p>
+                        <small class="text-white-50">
+                            <i class="bi bi-check-circle"></i> @hitosCompletados completados
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6">
+                <div class="stat-card gradient-green" @onclick='() => Navigation.NavigateTo("/tareas")'>
+                    <div class="stat-icon">
+                        <i class="bi bi-check2-square"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3>@tareas.Count</h3>
+                        <p>Tareas Totales</p>
+                        <small class="text-white-50">
+                            <i class="bi bi-check-all"></i> @tareasCompletadas completadas
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6">
+                <div class="stat-card gradient-orange" @onclick='() => Navigation.NavigateTo("/presupuesto")'>
+                    <div class="stat-icon">
+                        <i class="bi bi-cash-stack"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3>@totalGastado.ToString("C0")</h3>
+                        <p>Presupuesto Gastado</p>
+                        <small class="text-white-50">
+                            <i class="bi bi-percent"></i> @porcentajeGasto% del total
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alertas Importantes -->
+        @if (alertas.Any())
+        {
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card shadow-sm border-warning">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Alertas del Sistema (@alertas.Count)
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            @foreach (var alerta in alertas.Take(5))
+                            {
+                                <div class="alert alert-@alerta.Tipo mb-2">
+                                    <i class="bi bi-@alerta.Icono"></i> <strong>@alerta.Titulo:</strong> @alerta.Mensaje
+                                </div>
+                            }
+                            @if (alertas.Count > 5)
+                            {
+                                <small class="text-muted">Y @(alertas.Count - 5) alertas más...</small>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Progreso Global y Presupuesto -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-bar-chart-fill"></i> Progreso de Proyectos</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (proyectos.Any())
+                        {
+                            @foreach (var proyecto in proyectos.OrderByDescending(p => CalcularProgresoProyecto(p)).Take(5))
+                            {
+                                var progreso = CalcularProgresoProyecto(proyecto);
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <strong class="small">@proyecto.pro_nombre</strong>
+                                        <span class="badge bg-@(progreso >= 80 ? "success" : progreso >= 50 ? "primary" : "warning")">
+                                            @progreso%
+                                        </span>
+                                    </div>
+                                    <div class="progress" style="height: 10px;">
+                                        <div class="progress-bar bg-@(progreso >= 80 ? "success" : progreso >= 50 ? "primary" : "warning")"
+                                             style="width: @progreso%">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">
+                                        <i class="bi bi-calendar3"></i>
+                                        @proyecto.pro_fechaInicio?.ToString("dd/MM/yy") - @proyecto.pro_fechaFinEstimada?.ToString("dd/MM/yy")
+                                    </small>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-1"></i>
+                                <p>No hay proyectos registrados</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-piggy-bank-fill"></i> Estado Presupuestario</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center mb-4">
+                            <div class="col-4">
+                                <div class="stat-box">
+                                    <h4 class="text-primary">@presupuestoTotal.ToString("C0")</h4>
+                                    <small class="text-muted">Total</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="stat-box">
+                                    <h4 class="text-danger">@totalGastado.ToString("C0")</h4>
+                                    <small class="text-muted">Gastado</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="stat-box">
+                                    <h4 class="text-success">@((presupuestoTotal - totalGastado).ToString("C0"))</h4>
+                                    <small class="text-muted">Disponible</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h6 class="mb-3">Proyectos con Mayor Gasto</h6>
+                        @foreach (var proyecto in proyectos.OrderByDescending(p => ObtenerGastoProyecto(p.pro_codigo)).Take(5))
+                        {
+                            var gastado = ObtenerGastoProyecto(proyecto.pro_codigo);
+                            var porcentaje = proyecto.pro_presupuestoTotal > 0 ? (int)((gastado / proyecto.pro_presupuestoTotal) * 100) : 0;
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <strong class="small">@proyecto.pro_nombre</strong>
+                                    <span class="text-@(porcentaje > 100 ? "danger" : porcentaje > 80 ? "warning" : "success") fw-bold small">
+                                        @gastado.ToString("C0")
+                                    </span>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-@(porcentaje > 100 ? "danger" : porcentaje > 80 ? "warning" : "success")"
+                                         style="width: @Math.Min(porcentaje, 100)%">
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actividad Reciente y Tareas Pendientes -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Actividad Reciente</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (movimientos.Any())
+                        {
+                            <div class="timeline">
+                                @foreach (var mov in movimientos.OrderByDescending(m => m.ppre_fecha).Take(5))
+                                {
+                                    var proyecto = proyectos.FirstOrDefault(p => p.pro_codigo == mov.ppre_codproyecto);
+                                    <div class="timeline-item">
+                                        <div class="timeline-marker bg-danger"></div>
+                                        <div class="timeline-content">
+                                            <small class="text-muted">@mov.ppre_fecha?.ToString("dd/MM/yyyy HH:mm")</small>
+                                            <p class="mb-0"><strong>@(proyecto?.pro_nombre ?? "Proyecto")</strong></p>
+                                            <small>Gasto registrado: <strong class="text-danger">@mov.ppre_monto.ToString("C0")</strong></small>
+                                            <p class="text-muted small mb-0">@mov.ppre_descripcion</p>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-1"></i>
+                                <p>No hay actividad reciente</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0"><i class="bi bi-list-check"></i> Tareas Pendientes (@tareas.Count(t => t.pta_Estado != "Completada"))</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (tareas.Any(t => t.pta_Estado != "Completada"))
+                        {
+                            @foreach (var tarea in tareas.Where(t => t.pta_Estado != "Completada").OrderBy(t => t.pta_FechaInicio).Take(8))
+                            {
+                                var proyecto = proyectos.FirstOrDefault(p => p.pro_codigo == tarea.pta_codproyecto);
+                                <div class="d-flex align-items-start mb-3 pb-3 border-bottom">
+                                    <div class="form-check me-3">
+                                        <input class="form-check-input" type="checkbox" disabled>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <p class="mb-1"><strong>@tarea.pta_Descripcion</strong></p>
+                                        <small class="text-muted">
+                                            <i class="bi bi-folder"></i> @(proyecto?.pro_nombre ?? "Sin proyecto")
+                                        </small>
+                                        <br>
+                                        <span class="badge bg-@(tarea.pta_Estado == "En Progreso" ? "info" : "secondary") mt-1">
+                                            @tarea.pta_Estado
+                                        </span>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-check-circle fs-1 text-success"></i>
+                                <p>¡Todas las tareas completadas!</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Categorías -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0"><i class="bi bi-tag-fill"></i> Proyectos por Categoría</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            @foreach (var categoria in categorias)
+                            {
+                                var proyectosCategoria = proyectos.Count(p => p.pro_codCategoria == categoria.cat_codigo);
+                                @if (proyectosCategoria > 0)
+                                {
+                                    <div class="col-md-3 col-sm-6 mb-3">
+                                        <div class="category-card">
+                                            <h4 class="text-primary">@proyectosCategoria</h4>
+                                            <p class="mb-0">@categoria.cat_nombre</p>
+                                            <small class="text-muted">proyectos</small>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .dashboard-container {
+        animation: fadeIn 0.5s ease-in;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .stat-card {
+        background: linear-gradient(135deg, var(--start-color), var(--end-color));
+        border-radius: 15px;
+        padding: 1.5rem;
+        color: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+    .gradient-purple {
+        --start-color: #667eea;
+        --end-color: #764ba2;
+    }
+
+    .gradient-blue {
+        --start-color: #4facfe;
+        --end-color: #00f2fe;
+    }
+
+    .gradient-green {
+        --start-color: #43e97b;
+        --end-color: #38f9d7;
+    }
+
+    .gradient-orange {
+        --start-color: #fa709a;
+        --end-color: #fee140;
+    }
+
+    .stat-icon {
+        font-size: 3rem;
+        opacity: 0.8;
+    }
+
+    .stat-content h3 {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 0;
+    }
+
+    .stat-content p {
+        margin: 0;
+        font-size: 1rem;
+        opacity: 0.9;
+    }
+
+    .stat-box {
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 10px;
+    }
+
+    .timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+
+    .timeline-item {
+        position: relative;
+        padding-bottom: 1.5rem;
+    }
+
+    .timeline-marker {
+        position: absolute;
+        left: -30px;
+        top: 5px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid white;
+    }
+
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -25px;
+        top: 17px;
+        width: 2px;
+        height: calc(100% - 5px);
+        background: #dee2e6;
+    }
+
+    .timeline-item:last-child::before {
+        display: none;
+    }
+
+    .category-card {
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border-radius: 10px;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+
+        .category-card:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+</style>
+
+@code {
+    private List<ProyectoDto> proyectos = new();
+    private List<CategoriaDto> categorias = new();
+    private List<HitoDto> hitos = new();
+    private List<TareaDto> tareas = new();
+    private List<PresupuestoDto> movimientos = new();
+    private bool cargando = true;
+    private List<Alerta> alertas = new();
+
+    private decimal presupuestoTotal => proyectos.Sum(p => p.pro_presupuestoTotal);
+    private decimal totalGastado => movimientos.Sum(m => m.ppre_monto);
+    private int porcentajeGasto => presupuestoTotal > 0 ? (int)((totalGastado / presupuestoTotal) * 100) : 0;
+    private int hitosCompletados => hitos.Count(h => CalcularProgresoHito(h) == 100);
+    private int tareasCompletadas => tareas.Count(t => t.pta_Estado == "Completada");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        try
+        {
+            cargando = true;
+            proyectos = await ProyectoService.GetProyectos();
+            categorias = await CategoriaService.GetCategorias();
+            hitos = await HitoService.GetHitos();
+            tareas = await TareaService.GetTareas();
+            movimientos = await PresupuestoService.GetMovimientos();
+
+            GenerarAlertas();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private void GenerarAlertas()
+    {
+        alertas.Clear();
+
+        // Proyectos con presupuesto excedido
+        foreach (var proyecto in proyectos)
+        {
+            var gastado = ObtenerGastoProyecto(proyecto.pro_codigo);
+            var porcentaje = proyecto.pro_presupuestoTotal > 0 ? (gastado / proyecto.pro_presupuestoTotal) * 100 : 0;
+
+            if (porcentaje > 100)
+            {
+                alertas.Add(new Alerta
+                {
+                    Tipo = "danger",
+                    Icono = "exclamation-circle-fill",
+                    Titulo = "Presupuesto Excedido",
+                    Mensaje = $"El proyecto '{proyecto.pro_nombre}' ha superado su presupuesto en {(porcentaje - 100):F0}%"
+                });
+            }
+            else if (porcentaje > 80)
+            {
+                alertas.Add(new Alerta
+                {
+                    Tipo = "warning",
+                    Icono = "exclamation-triangle-fill",
+                    Titulo = "Presupuesto en Riesgo",
+                    Mensaje = $"El proyecto '{proyecto.pro_nombre}' ha utilizado el {porcentaje:F0}% de su presupuesto"
+                });
+            }
+        }
+
+        // Tareas atrasadas
+        var tareasAtrasadas = tareas.Where(t =>
+            t.pta_Estado != "Completada" &&
+            t.pta_FechaFin.HasValue &&
+            t.pta_FechaFin.Value < DateTime.Now
+        ).Count();
+
+        if (tareasAtrasadas > 0)
+        {
+            alertas.Add(new Alerta
+            {
+                Tipo = "warning",
+                Icono = "clock-fill",
+                Titulo = "Tareas Atrasadas",
+                Mensaje = $"Hay {tareasAtrasadas} tarea(s) que han pasado su fecha límite"
+            });
+        }
+    }
+
+    private int CalcularProgresoProyecto(ProyectoDto proyecto)
+    {
+        if (proyecto.pro_fechaInicio == null || proyecto.pro_fechaFinEstimada == null)
+            return 0;
+
+        var inicio = proyecto.pro_fechaInicio.Value;
+        var fin = proyecto.pro_fechaFinEstimada.Value;
+        var hoy = DateTime.Now;
+
+        if (hoy < inicio) return 0;
+        if (hoy > fin) return 100;
+
+        var totalDias = (fin - inicio).TotalDays;
+        var diasTranscurridos = (hoy - inicio).TotalDays;
+
+        return (int)((diasTranscurridos / totalDias) * 100);
+    }
+
+    private int CalcularProgresoHito(HitoDto hito)
+    {
+        if (hito.phi_fechaInicio == null || hito.phi_fechaFin == null)
+            return 0;
+
+        var inicio = hito.phi_fechaInicio.Value;
+        var fin = hito.phi_fechaFin.Value;
+        var hoy = DateTime.Now;
+
+        if (hoy < inicio) return 0;
+        if (hoy > fin) return 100;
+
+        var totalDias = (fin - inicio).TotalDays;
+        var diasTranscurridos = (hoy - inicio).TotalDays;
+
+        return (int)((diasTranscurridos / totalDias) * 100);
+    }
+
+    private decimal ObtenerGastoProyecto(int proyectoId)
+    {
+        return movimientos.Where(m => m.ppre_codproyecto == proyectoId).Sum(m => m.ppre_monto);
+    }
+
+    private class Alerta
+    {
+        public string Tipo { get; set; } = "info";
+        public string Icono { get; set; } = "info-circle";
+        public string Titulo { get; set; } = string.Empty;
+        public string Mensaje { get; set; } = string.Empty;
+    }
+}

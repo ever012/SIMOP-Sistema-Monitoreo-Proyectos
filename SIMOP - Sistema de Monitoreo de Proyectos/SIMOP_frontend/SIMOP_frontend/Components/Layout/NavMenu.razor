@@ -1,0 +1,73 @@
+﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">
+            <i class="bi bi-graph-up-arrow"></i> SIMOP
+        </a>
+        <small class="text-white-50">Sistema de Monitoreo de Proyectos</small>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        <!-- Dashboard Principal -->
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-speedometer2" aria-hidden="true"></span> Dashboard
+            </NavLink>
+        </div>
+
+        <!-- Sección de Gestión -->
+        <div class="nav-section px-3 pt-3">
+            <span class="text-white-50 small fw-bold">GESTIÓN</span>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="proyectos">
+                <span class="bi bi-folder-fill" aria-hidden="true"></span> Proyectos
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="hitos">
+                <span class="bi bi-flag-fill" aria-hidden="true"></span> Hitos
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="tareas">
+                <span class="bi bi-check2-square" aria-hidden="true"></span> Tareas
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="presupuesto">
+                <span class="bi bi-cash-stack" aria-hidden="true"></span> Presupuesto
+            </NavLink>
+        </div>
+
+        <!-- Sección de Configuración -->
+        <div class="nav-section px-3 pt-3">
+            <span class="text-white-50 small fw-bold">CONFIGURACIÓN</span>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="categorias">
+                <span class="bi bi-tag-fill" aria-hidden="true"></span> Categorías
+            </NavLink>
+        </div>
+
+        <hr class="my-3 border-secondary opacity-25" />
+        <span style="font-size:1px;">Ever Castellon </span>
+
+
+        <!-- Divisor -->
+        <!-- Sección de Ayuda -->
+        <div class="nav-item px-3">
+            <a class="nav-link" href="https://learn.microsoft.com/aspnet/core/" target="_blank">
+                <span class="bi bi-question-circle" aria-hidden="true"></span> Ayuda
+            </a>
+        </div>
+    </nav>
+</div>

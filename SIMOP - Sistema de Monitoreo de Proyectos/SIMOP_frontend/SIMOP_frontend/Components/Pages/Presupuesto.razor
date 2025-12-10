@@ -1,0 +1,559 @@
+﻿@page "/presupuesto"
+@using SIMOP_frontend.Models
+@using SIMOP_frontend.Services
+@inject IPresupuestoService PresupuestoService
+@inject IProyectoService ProyectoService
+@inject IJSRuntime JS
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3><i class="bi bi-cash-stack"></i> Gestión de Presupuesto</h3>
+            <small class="text-muted">Control y seguimiento de gastos por proyecto</small>
+        </div>
+        <button class="btn btn-primary" @onclick="AbrirModalNuevo">
+            <i class="bi bi-plus-circle"></i> Registrar Gasto
+        </button>
+    </div>
+
+    @if (mensaje != null)
+    {
+        <div class="alert alert-@(mensaje.Tipo) alert-dismissible fade show" role="alert">
+            <strong>@(mensaje.Tipo == "success" ? "✓" : "✗")</strong> @mensaje.Texto
+            <button type="button" class="btn-close" @onclick="() => mensaje = null"></button>
+        </div>
+    }
+
+    <!-- Resumen Global -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-primary">
+                <div class="card-body text-center">
+                    <i class="bi bi-wallet2 fs-2 text-primary"></i>
+                    <h4 class="mt-2 text-primary">@presupuestoTotal.ToString("C0")</h4>
+                    <small class="text-muted">Presupuesto Total</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-danger">
+                <div class="card-body text-center">
+                    <i class="bi bi-arrow-down-circle fs-2 text-danger"></i>
+                    <h4 class="mt-2 text-danger">@totalGastado.ToString("C0")</h4>
+                    <small class="text-muted">Total Gastado</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-success">
+                <div class="card-body text-center">
+                    <i class="bi bi-piggy-bank fs-2 text-success"></i>
+                    <h4 class="mt-2 text-success">@((presupuestoTotal - totalGastado).ToString("C0"))</h4>
+                    <small class="text-muted">Disponible</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-warning">
+                <div class="card-body text-center">
+                    <i class="bi bi-percent fs-2 text-warning"></i>
+                    <h4 class="mt-2 text-warning">@porcentajeGlobal%</h4>
+                    <small class="text-muted">Uso Presupuesto</small>
+                    <div class="progress mt-2" style="height: 8px;">
+                        <div class="progress-bar bg-@(porcentajeGlobal > 100 ? "danger" : porcentajeGlobal > 80 ? "warning" : "success")"
+                             style="width: @Math.Min(porcentajeGlobal, 100)%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertas de Presupuesto -->
+    @if (proyectosEnRiesgo.Any())
+    {
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>¡Atención!</strong> Los siguientes proyectos han superado el 80% de su presupuesto:
+            <ul class="mb-0 mt-2">
+                @foreach (var proyecto in proyectosEnRiesgo)
+                {
+                    var gastado = movimientos.Where(m => m.ppre_codproyecto == proyecto.pro_codigo).Sum(m => m.ppre_monto);
+                    var porcentaje = proyecto.pro_presupuestoTotal > 0 ? (int)((gastado / proyecto.pro_presupuestoTotal) * 100) : 0;
+                    <li><strong>@proyecto.pro_nombre</strong>: @porcentaje% utilizado (@gastado.ToString("C0") de @proyecto.pro_presupuestoTotal.ToString("C0"))</li>
+                }
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Filtros -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Proyecto</label>
+                    <select class="form-select" @bind="filtroProyecto">
+                        <option value="0">Todos los proyectos</option>
+                        @foreach (var proy in proyectos)
+                        {
+                            <option value="@proy.pro_codigo">@proy.pro_nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Fecha Desde</label>
+                    <input type="date" class="form-control" @bind="filtroFechaDesde">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Fecha Hasta</label>
+                    <input type="date" class="form-control" @bind="filtroFechaHasta">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltros">
+                        <i class="bi bi-x-circle"></i> Limpiar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2">Cargando movimientos...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link @(tabActiva == "movimientos" ? "active" : "")" @onclick='() => tabActiva = "movimientos"' style="cursor: pointer;">
+                    <i class="bi bi-list-ul"></i> Todos los Movimientos (@MovimientosFiltrados.Count)
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(tabActiva == "porproyecto" ? "active" : "")" @onclick='() => tabActiva = "porproyecto"' style="cursor: pointer;">
+                    <i class="bi bi-bar-chart"></i> Por Proyecto
+                </a>
+            </li>
+        </ul>
+
+        @if (tabActiva == "movimientos")
+        {
+            <!-- Vista de Movimientos -->
+            @if (MovimientosFiltrados.Count == 0)
+            {
+                <div class="alert alert-info text-center">
+                    <i class="bi bi-info-circle fs-3"></i>
+                    <p class="mb-0 mt-2">No hay movimientos registrados</p>
+                </div>
+            }
+            else
+            {
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 80px;">ID</th>
+                                        <th style="width: 120px;">Fecha</th>
+                                        <th>Proyecto</th>
+                                        <th>Descripción</th>
+                                        <th style="width: 150px;" class="text-end">Monto</th>
+                                        <th style="width: 100px;" class="text-center">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var mov in MovimientosFiltrados.OrderByDescending(m => m.ppre_fecha))
+                                    {
+                                        var proyecto = proyectos.FirstOrDefault(p => p.pro_codigo == mov.ppre_codproyecto);
+
+                                        <tr>
+                                            <td class="align-middle">@mov.ppre_codigo</td>
+                                            <td class="align-middle">
+                                                <i class="bi bi-calendar3"></i> @mov.ppre_fecha?.ToString("dd/MM/yyyy")
+                                            </td>
+                                            <td class="align-middle">
+                                                <strong>@(proyecto?.pro_nombre ?? "Sin proyecto")</strong>
+                                            </td>
+                                            <td class="align-middle">@mov.ppre_descripcion</td>
+                                            <td class="align-middle text-end">
+                                                <span class="badge bg-danger fs-6">@mov.ppre_monto.ToString("C0")</span>
+                                            </td>
+                                            <td class="text-center">
+                                                <button class="btn btn-danger btn-sm" @onclick="() => ConfirmarEliminar(mov)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <td colspan="4" class="text-end"><strong>Total Mostrado:</strong></td>
+                                        <td class="text-end">
+                                            <strong class="text-danger">@MovimientosFiltrados.Sum(m => m.ppre_monto).ToString("C0")</strong>
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <!-- Vista Por Proyecto -->
+            <div class="row g-3">
+                @foreach (var proyecto in proyectos.OrderByDescending(p => ObtenerGastoProyecto(p.pro_codigo)))
+                {
+                    var gastado = ObtenerGastoProyecto(proyecto.pro_codigo);
+                    var porcentaje = proyecto.pro_presupuestoTotal > 0 ? (int)((gastado / proyecto.pro_presupuestoTotal) * 100) : 0;
+                    var movimientosProyecto = movimientos.Where(m => m.ppre_codproyecto == proyecto.pro_codigo).Count();
+
+                    @if (movimientosProyecto > 0)
+                    {
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0">@proyecto.pro_nombre</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <small class="text-muted">Presupuesto</small>
+                                            <small><strong>@proyecto.pro_presupuestoTotal.ToString("C0")</strong></small>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <small class="text-muted">Gastado</small>
+                                            <small class="text-danger"><strong>@gastado.ToString("C0")</strong></small>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <small class="text-muted">Disponible</small>
+                                            <small class="text-success"><strong>@((proyecto.pro_presupuestoTotal - gastado).ToString("C0"))</strong></small>
+                                        </div>
+
+                                        <div class="progress" style="height: 20px;">
+                                            <div class="progress-bar bg-@(porcentaje > 100 ? "danger" : porcentaje > 80 ? "warning" : "success")"
+                                                 style="width: @Math.Min(porcentaje, 100)%">
+                                                @porcentaje%
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-muted">
+                                            <i class="bi bi-receipt"></i> @movimientosProyecto movimiento(s)
+                                        </small>
+                                        @if (porcentaje > 100)
+                                        {
+                                            <span class="badge bg-danger">¡Excedido!</span>
+                                        }
+                                        else if (porcentaje > 80)
+                                        {
+                                            <span class="badge bg-warning">En Riesgo</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success">Normal</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        }
+
+        <div class="mt-3 text-muted small">
+            <i class="bi bi-info-circle"></i> Total de movimientos: <strong>@movimientos.Count</strong>
+        </div>
+    }
+</div>
+
+<!-- Modal Registrar Gasto -->
+@if (mostrarModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-plus-circle"></i> Registrar Gasto
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CerrarModal"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label class="form-label fw-semibold">Proyecto <span class="text-danger">*</span></label>
+                                <select class="form-select" @bind="movimientoActual.ppre_codproyecto">
+                                    <option value="0">-- Seleccionar Proyecto --</option>
+                                    @foreach (var proy in proyectos)
+                                    {
+                                        var gastado = ObtenerGastoProyecto(proy.pro_codigo);
+                                        var disponible = proy.pro_presupuestoTotal - gastado;
+                                        <option value="@proy.pro_codigo">
+                                            @proy.pro_nombre - Disponible: @disponible.ToString("C0")
+                                        </option>
+                                    }
+                                </select>
+                                @if (movimientoActual.ppre_codproyecto == 0)
+                                {
+                                    <small class="text-danger">El proyecto es requerido</small>
+                                }
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Monto <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control" @bind="movimientoActual.ppre_monto"
+                                           step="0.01" min="0" placeholder="0.00" />
+                                </div>
+                                @if (movimientoActual.ppre_monto <= 0)
+                                {
+                                    <small class="text-danger">El monto debe ser mayor a 0</small>
+                                }
+                                @if (movimientoActual.ppre_codproyecto > 0 && ValidarPresupuesto())
+                                {
+                                    <small class="text-warning">
+                                        <i class="bi bi-exclamation-triangle"></i> Este gasto excederá el presupuesto disponible
+                                    </small>
+                                }
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Fecha <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" @bind="movimientoActual.ppre_fecha" />
+                                @if (movimientoActual.ppre_fecha == null)
+                                {
+                                    <small class="text-danger">La fecha es requerida</small>
+                                }
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="form-label fw-semibold">Descripción / Concepto <span class="text-danger">*</span></label>
+                                <textarea class="form-control" @bind="movimientoActual.ppre_descripcion"
+                                          rows="3" maxlength="500"
+                                          placeholder="Ej: Compra de materiales de construcción..."></textarea>
+                                @if (string.IsNullOrWhiteSpace(movimientoActual.ppre_descripcion))
+                                {
+                                    <small class="text-danger">La descripción es requerida</small>
+                                }
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarModal">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </button>
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="GuardarMovimiento"
+                            disabled="@(!FormularioValido)">
+                        <i class="bi bi-check-circle"></i> Registrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<PresupuestoDto> movimientos = new();
+    private List<ProyectoDto> proyectos = new();
+    private PresupuestoDto movimientoActual = new();
+    private bool cargando = true;
+    private bool mostrarModal = false;
+    private Mensaje? mensaje;
+    private string tabActiva = "movimientos";
+
+    private int filtroProyecto = 0;
+    private DateTime? filtroFechaDesde;
+    private DateTime? filtroFechaHasta;
+
+    private decimal presupuestoTotal => proyectos.Sum(p => p.pro_presupuestoTotal);
+    private decimal totalGastado => movimientos.Sum(m => m.ppre_monto);
+    private int porcentajeGlobal => presupuestoTotal > 0 ? (int)((totalGastado / presupuestoTotal) * 100) : 0;
+
+    private List<ProyectoDto> proyectosEnRiesgo => proyectos.Where(p =>
+    {
+        var gastado = ObtenerGastoProyecto(p.pro_codigo);
+        var porcentaje = p.pro_presupuestoTotal > 0 ? (gastado / p.pro_presupuestoTotal) * 100 : 0;
+        return porcentaje >= 80;
+    }).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        try
+        {
+            cargando = true;
+            movimientos = await PresupuestoService.GetMovimientos();
+            proyectos = await ProyectoService.GetProyectos();
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al cargar datos: {ex.Message}", "danger");
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private List<PresupuestoDto> MovimientosFiltrados
+    {
+        get
+        {
+            var lista = movimientos.AsEnumerable();
+
+            if (filtroProyecto > 0)
+            {
+                lista = lista.Where(m => m.ppre_codproyecto == filtroProyecto);
+            }
+
+            if (filtroFechaDesde.HasValue)
+            {
+                lista = lista.Where(m => m.ppre_fecha >= filtroFechaDesde.Value);
+            }
+
+            if (filtroFechaHasta.HasValue)
+            {
+                lista = lista.Where(m => m.ppre_fecha <= filtroFechaHasta.Value);
+            }
+
+            return lista.ToList();
+        }
+    }
+
+    private void LimpiarFiltros()
+    {
+        filtroProyecto = 0;
+        filtroFechaDesde = null;
+        filtroFechaHasta = null;
+    }
+
+    private decimal ObtenerGastoProyecto(int proyectoId)
+    {
+        return movimientos.Where(m => m.ppre_codproyecto == proyectoId).Sum(m => m.ppre_monto);
+    }
+
+    private void AbrirModalNuevo()
+    {
+        movimientoActual = new PresupuestoDto
+        {
+            ppre_fecha = DateTime.Now
+        };
+        mostrarModal = true;
+    }
+
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        movimientoActual = new();
+    }
+
+    private bool FormularioValido =>
+        movimientoActual.ppre_codproyecto > 0 &&
+        movimientoActual.ppre_monto > 0 &&
+        movimientoActual.ppre_fecha != null &&
+        !string.IsNullOrWhiteSpace(movimientoActual.ppre_descripcion);
+
+    private bool ValidarPresupuesto()
+    {
+        if (movimientoActual.ppre_codproyecto <= 0) return false;
+
+        var proyecto = proyectos.FirstOrDefault(p => p.pro_codigo == movimientoActual.ppre_codproyecto);
+        if (proyecto == null) return false;
+
+        var gastadoActual = ObtenerGastoProyecto(proyecto.pro_codigo);
+        return (gastadoActual + movimientoActual.ppre_monto) > proyecto.pro_presupuestoTotal;
+    }
+
+    private async Task GuardarMovimiento()
+    {
+        if (!FormularioValido) return;
+
+        try
+        {
+            var (exito, mensajeRespuesta) = await PresupuestoService.CreateMovimiento(movimientoActual);
+
+            if (exito)
+            {
+                MostrarMensaje(mensajeRespuesta, "success");
+                CerrarModal();
+                await CargarDatos();
+            }
+            else
+            {
+                MostrarMensaje(mensajeRespuesta, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al guardar: {ex.Message}", "danger");
+        }
+    }
+
+    private async Task ConfirmarEliminar(PresupuestoDto mov)
+    {
+        bool confirmado = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"¿Estás seguro de eliminar este movimiento de {mov.ppre_monto.ToString("C0")}?"
+        );
+
+        if (confirmado)
+        {
+            await EliminarMovimiento(mov.ppre_codigo);
+        }
+    }
+
+    private async Task EliminarMovimiento(int id)
+    {
+        try
+        {
+            var (exito, mensajeRespuesta) = await PresupuestoService.DeleteMovimiento(id);
+
+            if (exito)
+            {
+                MostrarMensaje(mensajeRespuesta, "success");
+                await CargarDatos();
+            }
+            else
+            {
+                MostrarMensaje(mensajeRespuesta, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al eliminar: {ex.Message}", "danger");
+        }
+    }
+
+    private void MostrarMensaje(string texto, string tipo)
+    {
+        mensaje = new Mensaje { Texto = texto, Tipo = tipo };
+    }
+
+    private class Mensaje
+    {
+        public string Texto { get; set; } = string.Empty;
+        public string Tipo { get; set; } = "info";
+    }
+}

@@ -1,0 +1,23 @@
+﻿.project-card {
+    background: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    transition: 0.3s ease;
+}
+
+    .project-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+    }
+
+.progress-custom {
+    height: 10px;
+    background: #e5e7eb;
+    border-radius: 10px;
+}
+
+.progress-bar-custom {
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 10px;
+}

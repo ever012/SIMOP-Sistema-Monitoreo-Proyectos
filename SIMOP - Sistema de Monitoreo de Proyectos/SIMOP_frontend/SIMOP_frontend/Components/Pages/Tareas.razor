@@ -1,0 +1,582 @@
+﻿@page "/tareas"
+@using SIMOP_frontend.Models
+@using SIMOP_frontend.Services
+@inject ITareaService TareaService
+@inject IProyectoService ProyectoService
+@inject IHitoService HitoService
+@inject IJSRuntime JS
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3><i class="bi bi-check2-square"></i> Gestión de Tareas</h3>
+            <small class="text-muted">Vista global de todas las tareas del sistema</small>
+        </div>
+        <button class="btn btn-primary" @onclick="AbrirModalNuevo">
+            <i class="bi bi-plus-circle"></i> Nueva Tarea
+        </button>
+    </div>
+
+    @if (mensaje != null)
+    {
+        <div class="alert alert-@(mensaje.Tipo) alert-dismissible fade show" role="alert">
+            <strong>@(mensaje.Tipo == "success" ? "✓" : "✗")</strong> @mensaje.Texto
+            <button type="button" class="btn-close" @onclick="() => mensaje = null"></button>
+        </div>
+    }
+
+    <!-- Estadísticas Rápidas -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-list-task fs-2 text-primary"></i>
+                    <h4 class="mt-2">@tareas.Count</h4>
+                    <small class="text-muted">Total Tareas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-hourglass-split fs-2 text-warning"></i>
+                    <h4 class="mt-2">@tareas.Count(t => t.pta_Estado == "Pendiente")</h4>
+                    <small class="text-muted">Pendientes</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-arrow-repeat fs-2 text-info"></i>
+                    <h4 class="mt-2">@tareas.Count(t => t.pta_Estado == "En Progreso")</h4>
+                    <small class="text-muted">En Progreso</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-check-circle-fill fs-2 text-success"></i>
+                    <h4 class="mt-2">@tareas.Count(t => t.pta_Estado == "Completada")</h4>
+                    <small class="text-muted">Completadas</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Buscar Tarea</label>
+                    <input type="text" class="form-control" @bind="filtroBusqueda" @bind:event="oninput" placeholder="Descripción...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Proyecto</label>
+                    <select class="form-select" @bind="filtroProyecto">
+                        <option value="0">Todos los proyectos</option>
+                        @foreach (var proy in proyectos)
+                        {
+                            <option value="@proy.pro_codigo">@proy.pro_nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">Estado</label>
+                    <select class="form-select" @bind="filtroEstado">
+                        <option value="">Todos</option>
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="En Progreso">En Progreso</option>
+                        <option value="Completada">Completada</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">Vista</label>
+                    <select class="form-select" @bind="tipoVista">
+                        <option value="tabla">Tabla</option>
+                        <option value="kanban">Kanban</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltros">
+                        <i class="bi bi-x-circle"></i> Limpiar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2">Cargando tareas...</p>
+        </div>
+    }
+    else if (TareasFiltradas.Count == 0)
+    {
+        <div class="alert alert-info text-center">
+            <i class="bi bi-info-circle fs-3"></i>
+            <p class="mb-0 mt-2">No hay tareas registradas</p>
+        </div>
+    }
+    else
+    {
+        @if (tipoVista == "tabla")
+        {
+            <!-- Vista Tabla -->
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px;"></th>
+                            <th style="width: 60px;">ID</th>
+                            <th>Descripción</th>
+                            <th>Proyecto</th>
+                            <th>Hito</th>
+                            <th>Fecha Inicio</th>
+                            <th>Fecha Fin</th>
+                            <th style="width: 120px;">Estado</th>
+                            <th style="width: 150px;" class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var tarea in TareasFiltradas)
+                        {
+                            var proyecto = proyectos.FirstOrDefault(p => p.pro_codigo == tarea.pta_codproyecto);
+                            var hito = hitos.FirstOrDefault(h => h.phi_codigo == tarea.pta_codHito);
+
+                            <tr class="@(tarea.pta_Estado == "Completada" ? "table-light" : "")">
+                                <td class="text-center align-middle">
+                                    <input class="form-check-input" type="checkbox"
+                                           checked="@(tarea.pta_Estado == "Completada")"
+                                           @onchange="() => CambiarEstado(tarea)">
+                                </td>
+                                <td class="align-middle">@tarea.pta_codigo</td>
+                                <td class="align-middle">
+                                    <span class="@(tarea.pta_Estado == "Completada" ? "text-decoration-line-through text-muted" : "")">
+                                        @tarea.pta_Descripcion
+                                    </span>
+                                </td>
+                                <td class="align-middle">
+                                    <small class="text-muted">@(proyecto?.pro_nombre ?? "Sin proyecto")</small>
+                                </td>
+                                <td class="align-middle">
+                                    <small class="text-muted">@(hito?.phi_nombre ?? "Sin hito")</small>
+                                </td>
+                                <td class="align-middle">
+                                    @tarea.pta_FechaInicio?.ToString("dd/MM/yyyy")
+                                </td>
+                                <td class="align-middle">
+                                    @tarea.pta_FechaFin?.ToString("dd/MM/yyyy")
+                                </td>
+                                <td class="align-middle">
+                                    @if (tarea.pta_Estado == "Completada")
+                                    {
+                                        <span class="badge bg-success">Completada</span>
+                                    }
+                                    else if (tarea.pta_Estado == "En Progreso")
+                                    {
+                                        <span class="badge bg-info">En Progreso</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning">Pendiente</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <button class="btn btn-warning btn-sm me-1" @onclick="() => AbrirModalEditar(tarea)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => ConfirmarEliminar(tarea)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <!-- Vista Kanban -->
+            <div class="row g-3">
+                @foreach (var estado in new[] { "Pendiente", "En Progreso", "Completada" })
+                {
+                    var tareasEstado = TareasFiltradas.Where(t => t.pta_Estado == estado).ToList();
+
+                    <div class="col-md-4">
+                        <div class="card shadow-sm">
+                            <div class="card-header bg-@(estado == "Completada" ? "success" : estado == "En Progreso" ? "info" : "warning") text-white">
+                                <h6 class="mb-0">
+                                    @estado (@tareasEstado.Count)
+                                </h6>
+                            </div>
+                            <div class="card-body kanban-column">
+                                @if (tareasEstado.Any())
+                                {
+                                    @foreach (var tarea in tareasEstado)
+                                    {
+                                        var proyecto = proyectos.FirstOrDefault(p => p.pro_codigo == tarea.pta_codproyecto);
+                                        var hito = hitos.FirstOrDefault(h => h.phi_codigo == tarea.pta_codHito);
+
+                                        <div class="card mb-3 kanban-card">
+                                            <div class="card-body p-3">
+                                                <h6 class="card-title mb-2">@tarea.pta_Descripcion</h6>
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-folder"></i> @(proyecto?.pro_nombre ?? "N/A")
+                                                    </small>
+                                                </div>
+                                                @if (hito != null)
+                                                {
+                                                    <small class="text-muted d-block mb-2">
+                                                        <i class="bi bi-flag"></i> @hito.phi_nombre
+                                                    </small>
+                                                }
+                                                <small class="text-muted d-block mb-2">
+                                                    <i class="bi bi-calendar"></i> @tarea.pta_FechaInicio?.ToString("dd/MM/yyyy")
+                                                </small>
+                                                <div class="d-flex gap-2">
+                                                    <button class="btn btn-sm btn-outline-warning flex-fill" @onclick="() => AbrirModalEditar(tarea)">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmarEliminar(tarea)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="text-center text-muted py-3">
+                                        <i class="bi bi-inbox"></i>
+                                        <p class="mb-0 small">Sin tareas</p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="mt-3 text-muted small">
+            <i class="bi bi-info-circle"></i> Mostrando <strong>@TareasFiltradas.Count</strong> de <strong>@tareas.Count</strong> tareas
+        </div>
+    }
+</div>
+
+<!-- Modal Crear/Editar -->
+@if (mostrarModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-@(esNuevo ? "plus-circle" : "pencil-square")"></i>
+                        @(esNuevo ? "Nueva Tarea" : "Editar Tarea")
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CerrarModal"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Proyecto <span class="text-danger">*</span></label>
+                                <select class="form-select" @bind="tareaActual.pta_codproyecto" @bind:event="oninput">
+                                    <option value="0">-- Seleccionar Proyecto --</option>
+                                    @foreach (var proy in proyectos)
+                                    {
+                                        <option value="@proy.pro_codigo">@proy.pro_nombre</option>
+                                    }
+                                </select>
+                                @if (tareaActual.pta_codproyecto == 0)
+                                {
+                                    <small class="text-danger">El proyecto es requerido</small>
+                                }
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Hito (Opcional)</label>
+                                <select class="form-select" @bind="tareaActual.pta_codHito">
+                                    <option value="">-- Sin Hito --</option>
+                                    @foreach (var hito in HitosFiltradosPorProyecto)
+                                    {
+                                        <option value="@hito.phi_codigo">@hito.phi_nombre</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="form-label fw-semibold">Descripción <span class="text-danger">*</span></label>
+                                <textarea class="form-control" @bind="tareaActual.pta_Descripcion" rows="3" maxlength="500"
+                                          placeholder="Describe la tarea..."></textarea>
+                                @if (string.IsNullOrWhiteSpace(tareaActual.pta_Descripcion))
+                                {
+                                    <small class="text-danger">La descripción es requerida</small>
+                                }
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Estado</label>
+                                <select class="form-select" @bind="tareaActual.pta_Estado">
+                                    <option value="Pendiente">Pendiente</option>
+                                    <option value="En Progreso">En Progreso</option>
+                                    <option value="Completada">Completada</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Fecha Inicio</label>
+                                <input type="date" class="form-control" @bind="tareaActual.pta_FechaInicio" />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Fecha Fin</label>
+                                <input type="date" class="form-control" @bind="tareaActual.pta_FechaFin" />
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarModal">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </button>
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="GuardarTarea"
+                            disabled="@(!FormularioValido)">
+                        <i class="bi bi-check-circle"></i> @(esNuevo ? "Crear" : "Actualizar")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .kanban-column {
+        min-height: 400px;
+        max-height: 600px;
+        overflow-y: auto;
+    }
+
+    .kanban-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        cursor: pointer;
+    }
+
+        .kanban-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
+</style>
+
+@code {
+    private List<TareaDto> tareas = new();
+    private List<ProyectoDto> proyectos = new();
+    private List<HitoDto> hitos = new();
+    private TareaDto tareaActual = new();
+    private bool cargando = true;
+    private bool mostrarModal = false;
+    private bool esNuevo = true;
+    private Mensaje? mensaje;
+
+    private string filtroBusqueda = "";
+    private int filtroProyecto = 0;
+    private string filtroEstado = "";
+    private string tipoVista = "tabla";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        try
+        {
+            cargando = true;
+            tareas = await TareaService.GetTareas();
+            proyectos = await ProyectoService.GetProyectos();
+            hitos = await HitoService.GetHitos();
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al cargar datos: {ex.Message}", "danger");
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private List<TareaDto> TareasFiltradas
+    {
+        get
+        {
+            var lista = tareas.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(filtroBusqueda))
+            {
+                lista = lista.Where(t => t.pta_Descripcion.Contains(filtroBusqueda, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (filtroProyecto > 0)
+            {
+                lista = lista.Where(t => t.pta_codproyecto == filtroProyecto);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtroEstado))
+            {
+                lista = lista.Where(t => t.pta_Estado == filtroEstado);
+            }
+
+            return lista.OrderBy(t => t.pta_FechaInicio).ToList();
+        }
+    }
+
+    private List<HitoDto> HitosFiltradosPorProyecto =>
+        hitos.Where(h => h.phi_codproyecto == tareaActual.pta_codproyecto).ToList();
+
+    private void LimpiarFiltros()
+    {
+        filtroBusqueda = "";
+        filtroProyecto = 0;
+        filtroEstado = "";
+    }
+
+    private void AbrirModalNuevo()
+    {
+        esNuevo = true;
+        tareaActual = new TareaDto
+        {
+            pta_Estado = "Pendiente",
+            pta_FechaInicio = DateTime.Now
+        };
+        mostrarModal = true;
+    }
+
+    private void AbrirModalEditar(TareaDto tarea)
+    {
+        esNuevo = false;
+        tareaActual = new TareaDto
+        {
+            pta_codigo = tarea.pta_codigo,
+            pta_codproyecto = tarea.pta_codproyecto,
+            pta_codHito = tarea.pta_codHito,
+            pta_Descripcion = tarea.pta_Descripcion,
+            pta_Estado = tarea.pta_Estado,
+            pta_FechaInicio = tarea.pta_FechaInicio,
+            pta_FechaFin = tarea.pta_FechaFin
+        };
+        mostrarModal = true;
+    }
+
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        tareaActual = new();
+    }
+
+    private bool FormularioValido =>
+        tareaActual.pta_codproyecto > 0 &&
+        !string.IsNullOrWhiteSpace(tareaActual.pta_Descripcion);
+
+    private async Task GuardarTarea()
+    {
+        if (!FormularioValido) return;
+
+        try
+        {
+            (bool exito, string mensajeRespuesta) = esNuevo
+                ? await TareaService.CreateTarea(tareaActual)
+                : await TareaService.UpdateTarea(tareaActual.pta_codigo, tareaActual);
+
+            if (exito)
+            {
+                MostrarMensaje(mensajeRespuesta, "success");
+                CerrarModal();
+                await CargarDatos();
+            }
+            else
+            {
+                MostrarMensaje(mensajeRespuesta, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al guardar: {ex.Message}", "danger");
+        }
+    }
+
+    private async Task CambiarEstado(TareaDto tarea)
+    {
+        tarea.pta_Estado = tarea.pta_Estado == "Completada" ? "Pendiente" : "Completada";
+        var (exito, mensajeRespuesta) = await TareaService.UpdateTarea(tarea.pta_codigo, tarea);
+
+        if (exito)
+        {
+            await CargarDatos();
+        }
+        else
+        {
+            MostrarMensaje(mensajeRespuesta, "danger");
+        }
+    }
+
+    private async Task ConfirmarEliminar(TareaDto tarea)
+    {
+        bool confirmado = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"¿Estás seguro de eliminar la tarea '{tarea.pta_Descripcion}'?"
+        );
+
+        if (confirmado)
+        {
+            await EliminarTarea(tarea.pta_codigo);
+        }
+    }
+
+    private async Task EliminarTarea(int id)
+    {
+        try
+        {
+            var (exito, mensajeRespuesta) = await TareaService.DeleteTarea(id);
+
+            if (exito)
+            {
+                MostrarMensaje(mensajeRespuesta, "success");
+                await CargarDatos();
+            }
+            else
+            {
+                MostrarMensaje(mensajeRespuesta, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al eliminar: {ex.Message}", "danger");
+        }
+    }
+
+    private void MostrarMensaje(string texto, string tipo)
+    {
+        mensaje = new Mensaje { Texto = texto, Tipo = tipo };
+    }
+
+    private class Mensaje
+    {
+        public string Texto { get; set; } = string.Empty;
+        public string Tipo { get; set; } = "info";
+    }
+}

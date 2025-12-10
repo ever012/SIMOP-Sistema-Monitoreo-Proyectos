@@ -1,0 +1,820 @@
+﻿@page "/proyectos/{id:int}"
+@using SIMOP_frontend.Models
+@using SIMOP_frontend.Services
+@inject IProyectoService ProyectoService
+@inject ICategoriaService CategoriaService
+@inject IHitoService HitoService
+@inject ITareaService TareaService
+@inject IPresupuestoService PresupuestoService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="container-fluid py-4">
+    @if (cargando)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2">Cargando proyecto...</p>
+        </div>
+    }
+    else if (proyecto == null)
+    {
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle"></i> Proyecto no encontrado
+        </div>
+    }
+    else
+    {
+        <!-- Header del Proyecto -->
+        <div class="card mb-4 shadow">
+            <div class="card-header bg-gradient-primary text-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <button class="btn btn-light btn-sm me-3" @onclick="Volver">
+                            <i class="bi bi-arrow-left"></i> Volver
+                        </button>
+                        <h4 class="d-inline mb-0">@proyecto.pro_nombre</h4>
+                        <span class="badge bg-light text-dark ms-2">#@proyecto.pro_codigo</span>
+                    </div>
+                    <div>
+                        <button class="btn btn-warning btn-sm me-2" @onclick="EditarProyecto">
+                            <i class="bi bi-pencil"></i> Editar
+                        </button>
+                        <button class="btn btn-danger btn-sm" @onclick="EliminarProyecto">
+                            <i class="bi bi-trash"></i> Eliminar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <p class="text-muted mb-3">@proyecto.pro_descripcion</p>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <small class="text-muted d-block">Categoría</small>
+                                <strong>@(categoria?.cat_nombre ?? "Sin categoría")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted d-block">Ubicación</small>
+                                <strong>@(proyecto.pro_ubicacion ?? "N/A")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted d-block">Fecha Inicio</small>
+                                <strong>@proyecto.pro_fechaInicio?.ToString("dd/MM/yyyy")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted d-block">Fecha Fin Estimada</small>
+                                <strong>@proyecto.pro_fechaFinEstimada?.ToString("dd/MM/yyyy")</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h6 class="text-muted mb-3">Progreso General</h6>
+                                <div class="display-4 text-primary mb-2">@CalcularProgreso()%</div>
+                                <div class="progress mb-3" style="height: 10px;">
+                                    <div class="progress-bar bg-success" style="width: @CalcularProgreso()%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <small class="text-muted d-block">Presupuesto Total</small>
+                                        <strong class="text-success">@proyecto.pro_presupuestoTotal.ToString("C0")</strong>
+                                    </div>
+                                    <div>
+                                        <small class="text-muted d-block">Gastado</small>
+                                        <strong class="text-danger">@gastoTotal.ToString("C0")</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs de Navegación -->
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link @(tabActiva == "hitos" ? "active" : "")" @onclick='() => tabActiva = "hitos"' style="cursor: pointer;">
+                    <i class="bi bi-flag"></i> Hitos (@hitos.Count)
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(tabActiva == "tareas" ? "active" : "")" @onclick='() => tabActiva = "tareas"' style="cursor: pointer;">
+                    <i class="bi bi-check2-square"></i> Tareas (@tareas.Count)
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(tabActiva == "presupuesto" ? "active" : "")" @onclick='() => tabActiva = "presupuesto"' style="cursor: pointer;">
+                    <i class="bi bi-cash-stack"></i> Presupuesto (@movimientos.Count)
+                </a>
+            </li>
+        </ul>
+
+        <!-- Contenido de Tabs -->
+        @if (tabActiva == "hitos")
+        {
+            <!-- Sección Hitos -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-flag-fill"></i> Hitos del Proyecto</h5>
+                    <button class="btn btn-primary btn-sm" @onclick="AbrirModalNuevoHito">
+                        <i class="bi bi-plus-circle"></i> Agregar Hito
+                    </button>
+                </div>
+                <div class="card-body">
+                    @if (!hitos.Any())
+                    {
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> No hay hitos registrados para este proyecto.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="timeline">
+                            @foreach (var hito in hitos.OrderBy(h => h.phi_fechaInicio))
+                            {
+                                var progreso = CalcularProgresoHito(hito);
+                                <div class="timeline-item mb-4">
+                                    <div class="d-flex">
+                                        <div class="timeline-marker">
+                                            <i class="bi bi-@(progreso == 100 ? "check-circle-fill text-success" : "circle text-primary")"></i>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <div class="card">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                                        <div>
+                                                            <h6 class="mb-1">@hito.phi_nombre</h6>
+                                                            <small class="text-muted">
+                                                                <i class="bi bi-calendar"></i>
+                                                                @hito.phi_fechaInicio?.ToString("dd/MM/yyyy") - @hito.phi_fechaFin?.ToString("dd/MM/yyyy")
+                                                            </small>
+                                                        </div>
+                                                        <div>
+                                                            <button class="btn btn-sm btn-outline-warning me-1" @onclick="() => EditarHito(hito)">
+                                                                <i class="bi bi-pencil"></i>
+                                                            </button>
+                                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminarHito(hito.phi_codigo)">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="progress" style="height: 8px;">
+                                                        <div class="progress-bar bg-@(progreso == 100 ? "success" : "primary")"
+                                                             style="width: @progreso%">
+                                                        </div>
+                                                    </div>
+                                                    <small class="text-muted">@progreso% completado</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else if (tabActiva == "tareas")
+        {
+            <!-- Sección Tareas -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-check2-square"></i> Tareas del Proyecto</h5>
+                    <button class="btn btn-primary btn-sm" @onclick="AbrirModalNuevaTarea">
+                        <i class="bi bi-plus-circle"></i> Agregar Tarea
+                    </button>
+                </div>
+                <div class="card-body">
+                    @if (!tareas.Any())
+                    {
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> No hay tareas registradas para este proyecto.
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var grupo in tareas.GroupBy(t => t.pta_Estado))
+                        {
+                            <div class="mb-4">
+                                <h6 class="text-muted">@grupo.Key (@grupo.Count())</h6>
+                                <div class="list-group">
+                                    @foreach (var tarea in grupo)
+                                    {
+                                        var hitoNombre = hitos.FirstOrDefault(h => h.phi_codigo == tarea.pta_codHito)?.phi_nombre ?? "Sin hito";
+                                        <div class="list-group-item">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div class="flex-grow-1">
+                                                    <div class="form-check d-inline-block">
+                                                        <input class="form-check-input" type="checkbox"
+                                                               checked="@(tarea.pta_Estado == "Completada")"
+                                                               @onchange="() => CambiarEstadoTarea(tarea)">
+                                                    </div>
+                                                    <span class="@(tarea.pta_Estado == "Completada" ? "text-decoration-line-through text-muted" : "")">
+                                                        @tarea.pta_Descripcion
+                                                    </span>
+                                                    <br>
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-tag"></i> @hitoNombre |
+                                                        <i class="bi bi-calendar"></i> @tarea.pta_FechaInicio?.ToString("dd/MM/yyyy")
+                                                    </small>
+                                                </div>
+                                                <div>
+                                                    <button class="btn btn-sm btn-outline-warning me-1" @onclick="() => EditarTarea(tarea)">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminarTarea(tarea.pta_codigo)">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+        else if (tabActiva == "presupuesto")
+        {
+            <!-- Sección Presupuesto -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Movimientos de Presupuesto</h5>
+                    <button class="btn btn-primary btn-sm" @onclick="AbrirModalNuevoMovimiento">
+                        <i class="bi bi-plus-circle"></i> Registrar Gasto
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <small class="text-muted">Total Gastado</small>
+                                    <h4 class="text-danger mb-0">@gastoTotal.ToString("C0")</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <small class="text-muted">Disponible</small>
+                                    <h4 class="text-success mb-0">@((proyecto.pro_presupuestoTotal - gastoTotal).ToString("C0"))</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <small class="text-muted">Porcentaje Usado</small>
+                                    <h4 class="@(porcentajeGasto > 100 ? "text-danger" : "text-primary") mb-0">@porcentajeGasto%</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!movimientos.Any())
+                    {
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> No hay movimientos de presupuesto registrados.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Descripción</th>
+                                        <th class="text-end">Monto</th>
+                                        <th style="width: 100px;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var mov in movimientos.OrderByDescending(m => m.ppre_fecha))
+                                    {
+                                        <tr>
+                                            <td>@mov.ppre_fecha?.ToString("dd/MM/yyyy")</td>
+                                            <td>@mov.ppre_descripcion</td>
+                                            <td class="text-end">
+                                                <strong class="text-danger">@mov.ppre_monto.ToString("C0")</strong>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminarMovimiento(mov.ppre_codigo)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<!-- Modal Hito -->
+@if (mostrarModalHito)
+{
+    <div class="modal fade show d-block" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5>
+                        <i class="bi bi-@(esNuevoHito ? "plus-circle" : "pencil-square")"></i>
+                        @(esNuevoHito ? "Nuevo Hito" : "Editar Hito")
+                    </h5>
+                    <button class="btn-close btn-close-white" @onclick="CerrarModales"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Nombre del Hito <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" @bind="hitoActual.phi_nombre" maxlength="200" />
+                                @if (string.IsNullOrWhiteSpace(hitoActual.phi_nombre))
+                                {
+                                    <small class="text-danger">El nombre es requerido</small>
+                                }
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Fecha Inicio <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" @bind="hitoActual.phi_fechaInicio" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Fecha Fin <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" @bind="hitoActual.phi_fechaFin" />
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CerrarModales">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="GuardarHito"
+                            disabled="@(!ValidarHito())">
+                        @(esNuevoHito ? "Crear" : "Actualizar")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal Tarea -->
+@if (mostrarModalTarea)
+{
+    <div class="modal fade show d-block" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5>
+                        <i class="bi bi-@(esNuevaTarea ? "plus-circle" : "pencil-square")"></i>
+                        @(esNuevaTarea ? "Nueva Tarea" : "Editar Tarea")
+                    </h5>
+                    <button class="btn-close btn-close-white" @onclick="CerrarModales"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Descripción <span class="text-danger">*</span></label>
+                                <textarea class="form-control" @bind="tareaActual.pta_Descripcion" rows="3" maxlength="500"></textarea>
+                                @if (string.IsNullOrWhiteSpace(tareaActual.pta_Descripcion))
+                                {
+                                    <small class="text-danger">La descripción es requerida</small>
+                                }
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Hito (Opcional)</label>
+                                <select class="form-select" @bind="tareaActual.pta_codHito">
+                                    <option value="">Sin hito</option>
+                                    @foreach (var hito in hitos)
+                                    {
+                                        <option value="@hito.phi_codigo">@hito.phi_nombre</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Estado</label>
+                                <select class="form-select" @bind="tareaActual.pta_Estado">
+                                    <option value="Pendiente">Pendiente</option>
+                                    <option value="En Progreso">En Progreso</option>
+                                    <option value="Completada">Completada</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Fecha Inicio</label>
+                                <input type="date" class="form-control" @bind="tareaActual.pta_FechaInicio" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Fecha Fin</label>
+                                <input type="date" class="form-control" @bind="tareaActual.pta_FechaFin" />
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CerrarModales">Cancelar</button>
+                    <button class="btn btn-info text-white" @onclick="GuardarTarea"
+                            disabled="@(!ValidarTarea())">
+                        @(esNuevaTarea ? "Crear" : "Actualizar")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal Presupuesto -->
+@if (mostrarModalPresupuesto)
+{
+    <div class="modal fade show d-block" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5><i class="bi bi-plus-circle"></i> Registrar Gasto</h5>
+                    <button class="btn-close btn-close-white" @onclick="CerrarModales"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Monto <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control" @bind="presupuestoActual.ppre_monto"
+                                           step="0.01" min="0" />
+                                </div>
+                                @if (presupuestoActual.ppre_monto <= 0)
+                                {
+                                    <small class="text-danger">El monto debe ser mayor a 0</small>
+                                }
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Fecha <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" @bind="presupuestoActual.ppre_fecha" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Descripción <span class="text-danger">*</span></label>
+                                <textarea class="form-control" @bind="presupuestoActual.ppre_descripcion"
+                                          rows="3" maxlength="500"></textarea>
+                                @if (string.IsNullOrWhiteSpace(presupuestoActual.ppre_descripcion))
+                                {
+                                    <small class="text-danger">La descripción es requerida</small>
+                                }
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CerrarModales">Cancelar</button>
+                    <button class="btn btn-success" @onclick="GuardarPresupuesto"
+                            disabled="@(!ValidarPresupuesto())">
+                        Registrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .timeline {
+        position: relative;
+    }
+
+    .timeline-item {
+        position: relative;
+    }
+
+    .timeline-marker {
+        font-size: 1.5rem;
+        margin-right: 1rem;
+    }
+</style>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ProyectoDto? proyecto;
+    private CategoriaDto? categoria;
+    private List<HitoDto> hitos = new();
+    private List<TareaDto> tareas = new();
+    private List<PresupuestoDto> movimientos = new();
+    private bool cargando = true;
+    private string tabActiva = "hitos";
+    private bool mostrarModalHito = false;
+    private bool mostrarModalTarea = false;
+    private bool mostrarModalPresupuesto = false;
+
+    private HitoDto hitoActual = new();
+    private TareaDto tareaActual = new();
+    private PresupuestoDto presupuestoActual = new();
+
+    private bool esNuevoHito = true;
+    private bool esNuevaTarea = true;
+
+    private decimal gastoTotal => movimientos.Sum(m => m.ppre_monto);
+    private int porcentajeGasto => proyecto?.pro_presupuestoTotal > 0
+        ? (int)((gastoTotal / proyecto.pro_presupuestoTotal) * 100)
+        : 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        try
+        {
+            cargando = true;
+            proyecto = await ProyectoService.GetProyecto(Id);
+
+            if (proyecto != null)
+            {
+                categoria = await CategoriaService.GetCategoria(proyecto.pro_codCategoria);
+                hitos = (await HitoService.GetHitos()).Where(h => h.phi_codproyecto == Id).ToList();
+                tareas = (await TareaService.GetTareas()).Where(t => t.pta_codproyecto == Id).ToList();
+                movimientos = await PresupuestoService.GetMovimientosPorProyecto(Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private int CalcularProgreso()
+    {
+        if (proyecto?.pro_fechaInicio == null || proyecto?.pro_fechaFinEstimada == null)
+            return 0;
+
+        var inicio = proyecto.pro_fechaInicio.Value;
+        var fin = proyecto.pro_fechaFinEstimada.Value;
+        var hoy = DateTime.Now;
+
+        if (hoy < inicio) return 0;
+        if (hoy > fin) return 100;
+
+        var totalDias = (fin - inicio).TotalDays;
+        var diasTranscurridos = (hoy - inicio).TotalDays;
+
+        return (int)((diasTranscurridos / totalDias) * 100);
+    }
+
+    private int CalcularProgresoHito(HitoDto hito)
+    {
+        if (hito.phi_fechaInicio == null || hito.phi_fechaFin == null)
+            return 0;
+
+        var inicio = hito.phi_fechaInicio.Value;
+        var fin = hito.phi_fechaFin.Value;
+        var hoy = DateTime.Now;
+
+        if (hoy < inicio) return 0;
+        if (hoy > fin) return 100;
+
+        var totalDias = (fin - inicio).TotalDays;
+        var diasTranscurridos = (hoy - inicio).TotalDays;
+
+        return (int)((diasTranscurridos / totalDias) * 100);
+    }
+
+    private void Volver() => Navigation.NavigateTo("/proyectos");
+    private void EditarProyecto() => Navigation.NavigateTo($"/proyectos");
+    private async Task EliminarProyecto()
+    {
+        var confirmado = await JS.InvokeAsync<bool>("confirm", "¿Eliminar este proyecto?");
+        if (confirmado)
+        {
+            await ProyectoService.DeleteProyecto(Id);
+            Navigation.NavigateTo("/proyectos");
+        }
+    }
+
+    private void AbrirModalNuevoHito()
+    {
+        esNuevoHito = true;
+        hitoActual = new HitoDto
+        {
+            phi_codproyecto = Id,
+            phi_fechaInicio = DateTime.Now,
+            phi_fechaFin = DateTime.Now.AddMonths(1)
+        };
+        mostrarModalHito = true;
+    }
+
+    private void AbrirModalNuevaTarea()
+    {
+        esNuevaTarea = true;
+        tareaActual = new TareaDto
+        {
+            pta_codproyecto = Id,
+            pta_Estado = "Pendiente",
+            pta_FechaInicio = DateTime.Now
+        };
+        mostrarModalTarea = true;
+    }
+
+    private void AbrirModalNuevoMovimiento()
+    {
+        presupuestoActual = new PresupuestoDto
+        {
+            ppre_codproyecto = Id,
+            ppre_fecha = DateTime.Now
+        };
+        mostrarModalPresupuesto = true;
+    }
+
+    private void CerrarModales()
+    {
+        mostrarModalHito = false;
+        mostrarModalTarea = false;
+        mostrarModalPresupuesto = false;
+        hitoActual = new();
+        tareaActual = new();
+        presupuestoActual = new();
+    }
+
+    private bool ValidarHito() =>
+        !string.IsNullOrWhiteSpace(hitoActual.phi_nombre) &&
+        hitoActual.phi_fechaInicio != null &&
+        hitoActual.phi_fechaFin != null &&
+        hitoActual.phi_fechaFin >= hitoActual.phi_fechaInicio;
+
+    private bool ValidarTarea() =>
+        !string.IsNullOrWhiteSpace(tareaActual.pta_Descripcion);
+
+    private bool ValidarPresupuesto() =>
+        presupuestoActual.ppre_monto > 0 &&
+        presupuestoActual.ppre_fecha != null &&
+        !string.IsNullOrWhiteSpace(presupuestoActual.ppre_descripcion);
+
+    private async Task GuardarHito()
+    {
+        if (!ValidarHito()) return;
+
+        try
+        {
+            (bool exito, string mensajeRespuesta) = esNuevoHito
+                ? await HitoService.CreateHito(hitoActual)
+                : await HitoService.UpdateHito(hitoActual.phi_codigo, hitoActual);
+
+            if (exito)
+            {
+                await JS.InvokeVoidAsync("alert", mensajeRespuesta);
+                CerrarModales();
+                await CargarDatos();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", $"Error: {mensajeRespuesta}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+    }
+
+    private async Task GuardarTarea()
+    {
+        if (!ValidarTarea()) return;
+
+        try
+        {
+            (bool exito, string mensajeRespuesta) = esNuevaTarea
+                ? await TareaService.CreateTarea(tareaActual)
+                : await TareaService.UpdateTarea(tareaActual.pta_codigo, tareaActual);
+
+            if (exito)
+            {
+                await JS.InvokeVoidAsync("alert", mensajeRespuesta);
+                CerrarModales();
+                await CargarDatos();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", $"Error: {mensajeRespuesta}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+    }
+
+    private async Task GuardarPresupuesto()
+    {
+        if (!ValidarPresupuesto()) return;
+
+        try
+        {
+            var (exito, mensajeRespuesta) = await PresupuestoService.CreateMovimiento(presupuestoActual);
+
+            if (exito)
+            {
+                await JS.InvokeVoidAsync("alert", mensajeRespuesta);
+                CerrarModales();
+                await CargarDatos();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", $"Error: {mensajeRespuesta}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+    }
+    private void EditarHito(HitoDto hito)
+    {
+        esNuevoHito = false;
+        hitoActual = new HitoDto
+        {
+            phi_codigo = hito.phi_codigo,
+            phi_codproyecto = hito.phi_codproyecto,
+            phi_nombre = hito.phi_nombre,
+            phi_fechaInicio = hito.phi_fechaInicio,
+            phi_fechaFin = hito.phi_fechaFin
+        };
+        mostrarModalHito = true;
+    }
+
+    private async Task EliminarHito(int id)
+    {
+        var confirmado = await JS.InvokeAsync<bool>("confirm", "¿Eliminar este hito?");
+        if (confirmado)
+        {
+            var (exito, mensaje) = await HitoService.DeleteHito(id);
+            await JS.InvokeVoidAsync("alert", mensaje);
+            if (exito) await CargarDatos();
+        }
+    }
+
+    private void EditarTarea(TareaDto tarea)
+    {
+        esNuevaTarea = false;
+        tareaActual = new TareaDto
+        {
+            pta_codigo = tarea.pta_codigo,
+            pta_codproyecto = tarea.pta_codproyecto,
+            pta_codHito = tarea.pta_codHito,
+            pta_Descripcion = tarea.pta_Descripcion,
+            pta_Estado = tarea.pta_Estado,
+            pta_FechaInicio = tarea.pta_FechaInicio,
+            pta_FechaFin = tarea.pta_FechaFin
+        };
+        mostrarModalTarea = true;
+    }
+
+    private async Task EliminarTarea(int id)
+    {
+        var confirmado = await JS.InvokeAsync<bool>("confirm", "¿Eliminar esta tarea?");
+        if (confirmado)
+        {
+            var (exito, mensaje) = await TareaService.DeleteTarea(id);
+            await JS.InvokeVoidAsync("alert", mensaje);
+            if (exito) await CargarDatos();
+        }
+    }
+
+    private async Task EliminarMovimiento(int id)
+    {
+        var confirmado = await JS.InvokeAsync<bool>("confirm", "¿Eliminar este movimiento?");
+        if (confirmado)
+        {
+            var (exito, mensaje) = await PresupuestoService.DeleteMovimiento(id);
+            await JS.InvokeVoidAsync("alert", mensaje);
+            if (exito) await CargarDatos();
+        }
+    }
+    private async Task CambiarEstadoTarea(TareaDto tarea)
+    {
+        tarea.pta_Estado = tarea.pta_Estado == "Completada" ? "Pendiente" : "Completada";
+        await TareaService.UpdateTarea(tarea.pta_codigo, tarea);
+        await CargarDatos();
+    }
+}

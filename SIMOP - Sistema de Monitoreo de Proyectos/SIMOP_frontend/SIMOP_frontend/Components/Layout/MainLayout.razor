@@ -1,0 +1,45 @@
+﻿@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-muted">
+                    <i class="bi bi-calendar3"></i> @DateTime.Now.ToString("dddd, dd MMMM yyyy")
+                </span>
+                <span class="text-muted">|</span>
+                <span class="text-muted">
+                    <i class="bi bi-clock"></i> @DateTime.Now.ToString("HH:mm")
+                </span>
+            </div>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+
+        <footer class="footer px-4 py-3 mt-auto">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-md-6 text-muted small">
+                        &copy; 2024 SIMOP - Sistema de Monitoreo de Proyectos Sociales
+                    </div>
+                    <div class="col-md-6 text-end text-muted small">
+                        Versión 1.0.0 | Desarrollado con Blazor Server por Ever Castellón
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </main>
+</div>
+
+<div id="blazor-error-ui">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    Ocurrió un error inesperado.
+    <a href="" class="reload">Recargar</a>
+    <a class="dismiss">🗙</a>
+</div>

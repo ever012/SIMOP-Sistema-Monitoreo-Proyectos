@@ -1,0 +1,447 @@
+﻿@page "/hitos"
+@using SIMOP_frontend.Models
+@using SIMOP_frontend.Services
+@inject IHitoService HitoService
+@inject IProyectoService ProyectoService
+@inject IJSRuntime JS
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3><i class="bi bi-flag-fill"></i> Gestión de Hitos</h3>
+            <small class="text-muted">Vista global de todos los hitos del sistema</small>
+        </div>
+        <button class="btn btn-primary" @onclick="AbrirModalNuevo">
+            <i class="bi bi-plus-circle"></i> Nuevo Hito
+        </button>
+    </div>
+
+    @if (mensaje != null)
+    {
+        <div class="alert alert-@(mensaje.Tipo) alert-dismissible fade show" role="alert">
+            <strong>@(mensaje.Tipo == "success" ? "✓" : "✗")</strong> @mensaje.Texto
+            <button type="button" class="btn-close" @onclick="() => mensaje = null"></button>
+        </div>
+    }
+
+    <!-- Filtros -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Buscar Hito</label>
+                    <input type="text" class="form-control" @bind="filtroBusqueda" @bind:event="oninput" placeholder="Nombre del hito...">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Proyecto</label>
+                    <select class="form-select" @bind="filtroProyecto">
+                        <option value="0">Todos los proyectos</option>
+                        @foreach (var proy in proyectos)
+                        {
+                            <option value="@proy.pro_codigo">@proy.pro_nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">Estado</label>
+                    <select class="form-select" @bind="filtroEstado">
+                        <option value="todos">Todos</option>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="enprogreso">En Progreso</option>
+                        <option value="completado">Completado</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltros">
+                        <i class="bi bi-x-circle"></i> Limpiar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2">Cargando hitos...</p>
+        </div>
+    }
+    else if (HitosFiltrados.Count == 0)
+    {
+        <div class="alert alert-info text-center">
+            <i class="bi bi-info-circle fs-3"></i>
+            <p class="mb-0 mt-2">No hay hitos registrados</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 80px;">ID</th>
+                        <th>Hito</th>
+                        <th>Proyecto</th>
+                        <th>Fecha Inicio</th>
+                        <th>Fecha Fin</th>
+                        <th style="width: 120px;">Progreso</th>
+                        <th style="width: 100px;">Estado</th>
+                        <th style="width: 150px;" class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var hito in HitosFiltrados)
+                    {
+                        var proyecto = proyectos.FirstOrDefault(p => p.pro_codigo == hito.phi_codproyecto);
+                        var progreso = CalcularProgreso(hito);
+                        var estado = ObtenerEstado(hito);
+
+                        <tr>
+                            <td class="align-middle">@hito.phi_codigo</td>
+                            <td class="align-middle">
+                                <strong>@hito.phi_nombre</strong>
+                            </td>
+                            <td class="align-middle">
+                                <small class="text-muted">@(proyecto?.pro_nombre ?? "Sin proyecto")</small>
+                            </td>
+                            <td class="align-middle">
+                                @hito.phi_fechaInicio?.ToString("dd/MM/yyyy")
+                            </td>
+                            <td class="align-middle">
+                                @hito.phi_fechaFin?.ToString("dd/MM/yyyy")
+                            </td>
+                            <td class="align-middle">
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar bg-@(estado == "completado" ? "success" : "primary")"
+                                         style="width: @progreso%">
+                                        @progreso%
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="align-middle">
+                                @if (estado == "completado")
+                                {
+                                    <span class="badge bg-success">Completado</span>
+                                }
+                                else if (estado == "enprogreso")
+                                {
+                                    <span class="badge bg-primary">En Progreso</span>
+                                }
+                                else if (estado == "atrasado")
+                                {
+                                    <span class="badge bg-danger">Atrasado</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Pendiente</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <button class="btn btn-warning btn-sm me-1" @onclick="() => AbrirModalEditar(hito)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => ConfirmarEliminar(hito)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-3 text-muted small">
+            <i class="bi bi-info-circle"></i> Mostrando <strong>@HitosFiltrados.Count</strong> de <strong>@hitos.Count</strong> hitos
+        </div>
+    }
+</div>
+
+<!-- Modal Crear/Editar -->
+@if (mostrarModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-@(esNuevo ? "plus-circle" : "pencil-square")"></i>
+                        @(esNuevo ? "Nuevo Hito" : "Editar Hito")
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CerrarModal"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label class="form-label fw-semibold">Proyecto <span class="text-danger">*</span></label>
+                                <select class="form-select" @bind="hitoActual.phi_codproyecto">
+                                    <option value="0">-- Seleccionar Proyecto --</option>
+                                    @foreach (var proy in proyectos)
+                                    {
+                                        <option value="@proy.pro_codigo">@proy.pro_nombre</option>
+                                    }
+                                </select>
+                                @if (hitoActual.phi_codproyecto == 0)
+                                {
+                                    <small class="text-danger">El proyecto es requerido</small>
+                                }
+                            </div>
+
+                            <div class="col-md-12">
+                                <label class="form-label fw-semibold">Nombre del Hito <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" @bind="hitoActual.phi_nombre" maxlength="200"
+                                       placeholder="Ej: Construcción Fase 1" />
+                                @if (string.IsNullOrWhiteSpace(hitoActual.phi_nombre))
+                                {
+                                    <small class="text-danger">El nombre es requerido</small>
+                                }
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Fecha de Inicio <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" @bind="hitoActual.phi_fechaInicio" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Fecha de Fin <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" @bind="hitoActual.phi_fechaFin" />
+                                @if (hitoActual.phi_fechaFin < hitoActual.phi_fechaInicio)
+                                {
+                                    <small class="text-danger">La fecha fin debe ser posterior a la fecha inicio</small>
+                                }
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarModal">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </button>
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="GuardarHito"
+                            disabled="@(!FormularioValido)">
+                        <i class="bi bi-check-circle"></i> @(esNuevo ? "Crear" : "Actualizar")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<HitoDto> hitos = new();
+    private List<ProyectoDto> proyectos = new();
+    private HitoDto hitoActual = new();
+    private bool cargando = true;
+    private bool mostrarModal = false;
+    private bool esNuevo = true;
+    private Mensaje? mensaje;
+
+    private string filtroBusqueda = "";
+    private int filtroProyecto = 0;
+    private string filtroEstado = "todos";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        try
+        {
+            cargando = true;
+            hitos = await HitoService.GetHitos();
+            proyectos = await ProyectoService.GetProyectos();
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al cargar datos: {ex.Message}", "danger");
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private List<HitoDto> HitosFiltrados
+    {
+        get
+        {
+            var lista = hitos.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(filtroBusqueda))
+            {
+                lista = lista.Where(h => h.phi_nombre.Contains(filtroBusqueda, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (filtroProyecto > 0)
+            {
+                lista = lista.Where(h => h.phi_codproyecto == filtroProyecto);
+            }
+
+            if (filtroEstado != "todos")
+            {
+                lista = lista.Where(h => ObtenerEstado(h) == filtroEstado);
+            }
+
+            return lista.OrderBy(h => h.phi_fechaInicio).ToList();
+        }
+    }
+
+    private void LimpiarFiltros()
+    {
+        filtroBusqueda = "";
+        filtroProyecto = 0;
+        filtroEstado = "todos";
+    }
+
+    private int CalcularProgreso(HitoDto hito)
+    {
+        if (hito.phi_fechaInicio == null || hito.phi_fechaFin == null)
+            return 0;
+
+        var inicio = hito.phi_fechaInicio.Value;
+        var fin = hito.phi_fechaFin.Value;
+        var hoy = DateTime.Now;
+
+        if (hoy < inicio) return 0;
+        if (hoy > fin) return 100;
+
+        var totalDias = (fin - inicio).TotalDays;
+        var diasTranscurridos = (hoy - inicio).TotalDays;
+
+        return (int)((diasTranscurridos / totalDias) * 100);
+    }
+
+    private string ObtenerEstado(HitoDto hito)
+    {
+        var progreso = CalcularProgreso(hito);
+
+        if (progreso == 100)
+            return "completado";
+
+        if (hito.phi_fechaFin.HasValue && DateTime.Now > hito.phi_fechaFin.Value)
+            return "atrasado";
+
+        if (hito.phi_fechaInicio.HasValue && DateTime.Now >= hito.phi_fechaInicio.Value)
+            return "enprogreso";
+
+        return "pendiente";
+    }
+
+    private void AbrirModalNuevo()
+    {
+        esNuevo = true;
+        hitoActual = new HitoDto
+        {
+            phi_fechaInicio = DateTime.Now,
+            phi_fechaFin = DateTime.Now.AddMonths(1)
+        };
+        mostrarModal = true;
+    }
+
+    private void AbrirModalEditar(HitoDto hito)
+    {
+        esNuevo = false;
+        hitoActual = new HitoDto
+        {
+            phi_codigo = hito.phi_codigo,
+            phi_codproyecto = hito.phi_codproyecto,
+            phi_nombre = hito.phi_nombre,
+            phi_fechaInicio = hito.phi_fechaInicio,
+            phi_fechaFin = hito.phi_fechaFin
+        };
+        mostrarModal = true;
+    }
+
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        hitoActual = new();
+    }
+
+    private bool FormularioValido =>
+        hitoActual.phi_codproyecto > 0 &&
+        !string.IsNullOrWhiteSpace(hitoActual.phi_nombre) &&
+        hitoActual.phi_fechaInicio != null &&
+        hitoActual.phi_fechaFin != null &&
+        hitoActual.phi_fechaFin >= hitoActual.phi_fechaInicio;
+
+    private async Task GuardarHito()
+    {
+        if (!FormularioValido) return;
+
+        try
+        {
+            (bool exito, string mensajeRespuesta) = esNuevo
+                ? await HitoService.CreateHito(hitoActual)
+                : await HitoService.UpdateHito(hitoActual.phi_codigo, hitoActual);
+
+            if (exito)
+            {
+                MostrarMensaje(mensajeRespuesta, "success");
+                CerrarModal();
+                await CargarDatos();
+            }
+            else
+            {
+                MostrarMensaje(mensajeRespuesta, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al guardar: {ex.Message}", "danger");
+        }
+    }
+
+    private async Task ConfirmarEliminar(HitoDto hito)
+    {
+        bool confirmado = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"¿Estás seguro de eliminar el hito '{hito.phi_nombre}'?"
+        );
+
+        if (confirmado)
+        {
+            await EliminarHito(hito.phi_codigo);
+        }
+    }
+
+    private async Task EliminarHito(int id)
+    {
+        try
+        {
+            var (exito, mensajeRespuesta) = await HitoService.DeleteHito(id);
+
+            if (exito)
+            {
+                MostrarMensaje(mensajeRespuesta, "success");
+                await CargarDatos();
+            }
+            else
+            {
+                MostrarMensaje(mensajeRespuesta, "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje($"Error al eliminar: {ex.Message}", "danger");
+        }
+    }
+
+    private void MostrarMensaje(string texto, string tipo)
+    {
+        mensaje = new Mensaje { Texto = texto, Tipo = tipo };
+    }
+
+    private class Mensaje
+    {
+        public string Texto { get; set; } = string.Empty;
+        public string Tipo { get; set; } = "info";
+    }
+}
